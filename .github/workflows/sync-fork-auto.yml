@@ -121,13 +121,23 @@ jobs:
             if [ -n "$tag" ] && [ "$tag" != "null" ]; then
               echo "处理 Release: $tag"
               if git rev-parse "$tag" >/dev/null 2>&1; then
+                git push origin "$tag" 2>/dev/null || true
                 TAG_SHA=$(git rev-parse "$tag")
-                gh release view "$tag" --repo "$TARGET_REPO" >/dev/null 2>&1 && \
-                  gh release edit "$tag" --title "$name" --notes "$body" --repo "$TARGET_REPO" || \
-                  gh release create "$tag" --title "$name" --notes "$body" --target "$TAG_SHA" --repo "$TARGET_REPO"
-                echo "✅ Release $tag 已同步 (target: $TAG_SHA)"
+                echo "Tag SHA: $TAG_SHA"
+                if gh release view "$tag" --repo "$TARGET_REPO" >/dev/null 2>&1; then
+                  echo "更新已有 Release..."
+                  gh release edit "$tag" --title "$name" --notes "$body" --repo "$TARGET_REPO"
+                else
+                  echo "创建新 Release..."
+                  gh release create "$tag" \
+                    --title "$name" \
+                    --notes "$body" \
+                    --target "$TAG_SHA" \
+                    --repo "$TARGET_REPO"
+                fi
+                echo "✅ Release $tag 已同步"
               else
                 echo "⏭️ 跳过 $tag（本地不存在对应 tag）"
               fi
             fi
-          done
+          done || true
