@@ -123,7 +123,7 @@ jobs:
               if git rev-parse "$tag" >/dev/null 2>&1; then
                 gh release view "$tag" --repo "$TARGET_REPO" >/dev/null 2>&1 && \
                   gh release edit "$tag" --title "$name" --notes "$body" --repo "$TARGET_REPO" || \
-                  gh release create "$tag" --title "$name" --notes "$body" --target "$tag" --repo "$TARGET_REPO"
+                  gh release create "$tag" --title "$name" --notes "$body" --repo "$TARGET_REPO"
                 echo "✅ Release $tag 已同步"
               else
                 echo "⏭️ 跳过 $tag（本地不存在对应 tag）"
