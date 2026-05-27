@@ -1,14 +1,16 @@
 name: 一键自动同步 Fork 仓库（自动检测源仓库 + 代码 + Tags + Releases + 附件）
 
 on:
-  workflow_dispatch:   # 手动触发，推荐
-  # schedule:
-  #   - cron: '0 0 * * *'  # 可选：每天自动同步
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 0'
 
 jobs:
   sync-fork:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       # ----------------------------------------------
@@ -95,5 +97,37 @@ jobs:
         run: |
           DEFAULT_BRANCH=${{ steps.repo_info.outputs.default_branch }}
           echo "📤 推送代码到你的 fork（分支: $DEFAULT_BRANCH）"
+          echo "github.repository = ${{ github.repository }}"
+          echo "当前 origin URL:"
+          git remote get-url origin
           git remote set-url origin https://${{ secrets.MY_GIT_TOKEN }}@github.com/${{ github.repository }}.git
+          echo "修改后 origin URL:"
+          git remote get-url origin
           git push origin $DEFAULT_BRANCH
+
+      - name: Sync upstream releases
+        env:
+          GH_TOKEN: ${{ secrets.MY_GIT_TOKEN }}
+        run: |
+          UPSTREAM_REPO=${{ steps.repo_info.outputs.upstream_full_name }}
+          TARGET_REPO=${{ github.repository }}
+
+          echo "🔄 同步 Releases..."
+
+          UPSTREAM_RELEASES=$(curl -s -H "Authorization: token $GH_TOKEN" \
+            "https://api.github.com/repos/$UPSTREAM_REPO/releases")
+
+          echo "$UPSTREAM_RELEASES" | jq -r '.[] | "\(.tag_name)|\(.name)|\(.body // "")"' | while IFS='|' read -r tag name body; do
+            if [ -n "$tag" ] && [ "$tag" != "null" ]; then
+              echo "处理 Release: $tag"
+              if git rev-parse "$tag" >/dev/null 2>&1; then
+                TAG_SHA=$(git rev-parse "$tag")
+                gh release view "$tag" --repo "$TARGET_REPO" >/dev/null 2>&1 && \
+                  gh release edit "$tag" --title "$name" --notes "$body" --repo "$TARGET_REPO" || \
+                  gh release create "$tag" --title "$name" --notes "$body" --target "$TAG_SHA" --repo "$TARGET_REPO"
+                echo "✅ Release $tag 已同步 (target: $TAG_SHA)"
+              else
+                echo "⏭️ 跳过 $tag（本地不存在对应 tag）"
+              fi
+            fi
+          done
